@@ -1,0 +1,52 @@
+---
+# roles/rds_restore/tasks/main.yml
+- name: Check if restored instance already exists
+  amazon.aws.rds_instance_info:
+    db_instance_identifier: "{{ restored_db_identifier }}"
+    region: "{{ region }}"
+  register: restored_exists
+  failed_when: false
+
+  
+
+- name: Restore RDS instance from snapshot
+  amazon.aws.rds_instance:
+    db_instance_identifier: "{{ restored_db_identifier }}"
+    db_snapshot_identifier: "{{ snapshot_identifier }}"
+    db_instance_class: "{{ db_instance_class }}"
+    db_subnet_group_name: "{{ subnet_group_name }}"
+    vpc_security_group_ids: "{{ vpc_security_groups }}"
+    publicly_accessible: "{{ publicly_accessible }}"
+    engine: "{{ engine }}"
+    engine_version: "{{ engine_version }}"
+    allocated_storage: "{{ allocated_storage }}"
+    master_username: "{{ db_user }}"
+    master_user_password: "{{ db_pass }}"
+    region: "{{ region }}"
+    wait: yes
+    state: present
+    tags:
+      CreatedBy: Ansible
+      Purpose: TempRestoreBackup
+      Date: "{{ lookup('pipe', 'date +%Y-%m-%d') }}"
+  when: restored_exists.instances | length == 0
+
+- name: Wait 30 seconds before querying endpoint
+  pause:
+    seconds: 30
+
+- name: Get endpoint of restored RDS instance
+  amazon.aws.rds_instance_info:
+    db_instance_identifier: "{{ restored_db_identifier }}"
+    region: "{{ region }}"
+  register: restored_info
+  retries: 5
+  delay: 20
+  until: restored_info.instances | length > 0 and
+         restored_info.instances[0].endpoint is defined
+
+- set_fact:
+    restored_endpoint: "{{ restored_info.instances[0].endpoint.address }}"
+
+- debug:
+    msg: "Restored DB endpoint: {{ restored_endpoint }}"
