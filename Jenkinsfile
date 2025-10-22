@@ -1,5 +1,5 @@
 pipeline {
-    agent ansible
+    agent { label 'ansible'}
 
     environment {
         PLAYBOOK_PATH = "playbooks/main.yml"
