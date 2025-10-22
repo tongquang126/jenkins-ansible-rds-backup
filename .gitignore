@@ -7,3 +7,6 @@ __pycache__/
 
 # macOS junk
 .DS_Store
+ 
+# VS Code
+.vscode/
