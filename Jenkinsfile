@@ -46,7 +46,7 @@ pipeline {
                     }
         }        
     }
-    post (
+    post {
         success {
             echo "✅ Playbook executed successfully!"
         }
@@ -56,6 +56,6 @@ pipeline {
         always {
             clearWs()
         }
-    )
+    }
 
 }
