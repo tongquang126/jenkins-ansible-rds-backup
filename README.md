@@ -42,6 +42,8 @@ This setup improves operational consistency, reduces manual steps, and enables i
 ```
 
 ## Workflow
+![Pipeline overview](<../../../../Desktop/Screenshot 2025-10-23 at 5.47.22 PM.png>)
+
 1. Jenkins pipeline triggers (manual or scheduled).
 2. Agent labeled ansible initializes Python virtual environment.
 3. Repository (Ansible project) is checked out from SCM (GitHub).
