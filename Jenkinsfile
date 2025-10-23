@@ -13,13 +13,13 @@ pipeline {
             steps {
                 echo "🔧 Setting up Python virtual environment for Jenkins user..."
                 sh '''
-                    # If virtualenv is not exist, create new one
+                    # If virtualenv does not exist, create a new one
                     if [ ! -d "${VENV_PATH}" ]; then
                         echo "Creating virtualenv at ${VENV_PATH}..."
                         python3 -m venv ${VENV_PATH}
                     fi
 
-                    # Active virtual env and install required packages 
+                    # Activate virtualenv and install required packages 
                     source ${VENV_PATH}/bin/activate
                     pip install --upgrade pip
                     pip install ansible boto3 botocore awscli
@@ -52,9 +52,10 @@ pipeline {
                 ansiColor('xterm') {
                     sh '''
                         source ${VENV_PATH}/bin/activate
-                        ansible-playbook ${PLAYBOOK_PATH} | tee ${LOG_FILE}
+                        ansible-playbook ${PLAYBOOK_PATH} -vvv | tee ${LOG_FILE}
                         deactivate
                     '''
+                }
             }
         }
 
