@@ -56,6 +56,7 @@ Pipeline overview
    - Exports data to S3 bucket.
    - Cleans up temporary resources.
 6. Jenkins archives logs and reports success/failure.
+7. Clear up the workspace of a Jenkins job 
    
 ## Security Considerations
 - Secrets are n**ever stored in Jenkins**; they are retrieved dynamically from **AWS Secrets Manager** via Ansible.
