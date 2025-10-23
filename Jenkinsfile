@@ -49,11 +49,12 @@ pipeline {
         stage('Run Ansible Playbook') {
             steps {
                 echo "🚀 Running Ansible playbook..."
-                sh '''
-                    source ${VENV_PATH}/bin/activate
-                    ansible-playbook ${PLAYBOOK_PATH} -vvv | tee ${LOG_FILE}
-                    deactivate
-                '''
+                ansiColor('xterm') {
+                    sh '''
+                        source ${VENV_PATH}/bin/activate
+                        ansible-playbook ${PLAYBOOK_PATH} | tee ${LOG_FILE}
+                        deactivate
+                    '''
             }
         }
 
