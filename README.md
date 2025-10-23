@@ -1,163 +1,76 @@
-# 🧩 Aurora DB Export – Automated MySQL Database Export from AWS Backup Snapshot to S3
+# 🧩 Jenkins-Ansible MySQL Export Automation
 
-This project automates the process of exporting a ***specific MySQL database*** from an ***AWS Backup snapshot*** to ***Amazon S3***, using **Ansible**.
-It’s designed for **CloudOps / SRE** workflows where you need to quickly restore and extract database data without manual steps.
+This project automates the **export of MySQL/Aurora databases** from **AWS Backup snapshots** to **Amazon S3** using **Ansible**, integrated within a **Jenkins CI/CD pipeline**.
 
-# Workflow Overview
-The Ansible playbook orchestrates the following steps:
-- Discover snapshot metadata (via AWS APIs).
-- Retrieve database credentials from AWS Secrets Manager.
-- Restore an Aurora RDS cluster or instance from a given AWS Backup snapshot.
-- Create a temporary writer DB instance.
-- Dump a specific MySQL database via mysqldump.
-- Upload the dump file to Amazon S3.
-- Teardown temporary resources automatically after completion
+It extends the functionality of the original [pository aurora-db-export](https://github.com/tongquang126/aurora-db-export)
+ by introducing a Jenkins **pipeline (Jenkinsfile)** to orchestrate the execution of the Ansible playbooks in a controlled, repeatable, and auditable environment.
 
-## Architecture 
+# 🚀 Overview
+The pipeline enables DevOps teams to:
+- Retrieve AWS Backup snapshots of MySQL or Aurora databases
+- Restore a temporary RDS instance from snapshot
+- Dump a specific MySQL database from temporary RDS instance
+- Export the data to an Amazon S3 bucket
+- Tear down the temporary resources after completion
+- Automate the entire process through Jenkins pipeline stages
+
+This setup improves operational consistency, reduces manual steps, and enables integration into enterprise CI/CD workflows.
+
+## Project Architecture
+### High-Level Components
 ```pgsql
-[ Ansible Control Node (EC2 w/ IAM Role) ]
-                │
-                │ AWS API calls (boto3 via amazon.aws collection)
-                ▼
-+------------------------------------------------------------+
-|                  AWS RDS / Aurora Snapshot                 |
-+------------------------------------------------------------+
-                │
-                ▼
-+------------------------------------------------------------+
-| Restored Aurora Cluster  ──► Temporary Writer Instance     |
-|  │                                                           
-|  ├─ Retrieve credentials from AWS Secrets Manager           
-|  ├─ mysqldump target DB → local /tmp/testdb_backup.sql      
-|  └─ Upload to S3 bucket: s3://bucket4databackup/            |
-+------------------------------------------------------------+
-                │
-                ▼
-+------------------------------------------------------------+
-|             Cleanup (delete temp instance & cluster)        |
-+------------------------------------------------------------+
++-----------------------------+
+|        Jenkins Server       |
+| (Controller + Pipeline Job) |
++-------------+---------------+
+              |
+              v
++-----------------------------+
+| Jenkins Agent (label: ansible) |
+|  - Acts as Ansible Controller   |
+|  - Executes Playbook Stages     |
+|  - Runs Python venv environment |
++-------------+-------------------+
+              |
+              v
++-----------------------------+
+|     AWS Infrastructure      |
+|  - RDS / Aurora Snapshot    |
+|  - S3 Bucket (for export)   |
+|  - AWS Secrets Manager      |
++-----------------------------+
 ```
 
-## ⚙️ Prerequisites
-### Ansible Control Node (EC2)
-You need an **EC2 instance** (Amazon Linux 2023 recommended) with Ansible installed and attached IAM Role.
+## Workflow
+1. Jenkins pipeline triggers (manual or scheduled).
+2. Agent labeled ansible initializes Python virtual environment.
+3. Repository (Ansible project) is checked out from SCM (GitHub).
+4. Required Ansible collections are installed from collections/requirements.yml.
+5. Playbook (playbooks/main.yml) is executed:
+   - Retrieves DB credentials from AWS Secrets Manager.
+   - Identifies the latest AWS Backup snapshot.
+   - Creates a temporary DB instance.
+   - Dump a specific MySQL database from temporary RDS instance
+   - Exports data to S3 bucket.
+   - Cleans up temporary resources.
+6. Jenkins archives logs and reports success/failure.
+   
+## Security Considerations
+- Secrets are n**ever stored in Jenkins**; they are retrieved dynamically from **AWS Secrets Manager** via Ansible.
+- Jenkins workspace is **cleaned up** after each run using cleanWs().
+- The pipeline runs under l**east-privilege IAM roles** for both RDS and S3 operations.
 
-### IAM Role Policy
-Attach a role to the EC2 instance with the following minimal permissions:
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "RDSBackupAndRestore",
-      "Effect": "Allow",
-      "Action": [
-        "rds:Describe*",
-        "rds:ListTagsForResource",
-        "rds:AddTagsToResource",
-        "rds:CreateDBInstance",
-        "rds:DeleteDBInstance",
-        "rds:RestoreDBInstanceFromDBSnapshot",
-        "rds:RestoreDBClusterFromSnapshot",
-        "rds:CreateDBSnapshot",
-        "rds:DeleteDBSnapshot"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "S3UploadDownloadBackup",
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:PutObjectAcl",
-        "s3:GetObject",
-        "s3:GetObjectTagging",
-        "s3:PutObjectTagging",
-        "s3:ListBucket",
-        "s3:GetBucketLocation"
-      ],
-      "Resource": [
-        "arn:aws:s3:::bucket4databackup",
-        "arn:aws:s3:::bucket4databackup/*"
-      ]
-    },
-    {
-      "Sid": "SecretsManagerReadAccess",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:ListSecrets"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatchLoggingOptional",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-### Installation Steps (on EC2)
-```bash
-# 1. Update system and install dependencies
-sudo dnf update -y
-sudo dnf install -y git python3-pip mariadb105-client
+##  Logs & Artifacts
+- Ansible execution log: ansible_run.log
+- Stored as Jenkins build artifact for troubleshooting.
+- Can be viewed in Jenkins UI or downloaded for audit.
 
-# 2. Clone the repository
-git clone https://github.com/tongquang126/aurora-db-export.git
-cd aurora-db-export
+## Future Enhancements
+- Add Slack or email notifications for job completion.
+- Add parameterized builds for selecting snapshot ID or S3 destination.
+- Integrate Terraform for infrastructure provisioning.
+- Add automated testing for Ansible roles.
 
-# 3. Install Python dependencies
-pip3 install --user -r requirements.txt
-
-# 4. Install Ansible collections
-ansible-galaxy collection install -r collections/requirements.yml
-
-```
-## ▶️ Running the Playbook
-#### Modify the global variables to meet your requirement (group_vars/all.yml)
-Example configuration 
-```yaml
-region: us-east-1
-
-# RDS / snapshot info
-source_db_identifier: webdatabase
-snapshot_identifier: webdatabase-snapshot-2025-10-17
-restored_db_identifier: webdatabase-backup-temp
-database_name: testdb
-
-# Secret & S3
-secret_name: prod/webapp/rds
-s3_bucket: bucket4databackup
-backup_file_path: /tmp/testdb_backup.sql
-```
-
-#### Run the full workflow
-```bash
-ansible-playbook playbooks/main.yml -vvv
-```
-#### Or run specific steps via tags 
-```bash
-ansible-playbook playbooks/main.yml  --tags restore -vvv
-```
-
-## Notes & Best Practices
-- Run this playbook on EC2 with proper IAM role — no local AWS credentials required.
-- The project uses amazon.aws collection to interact with RDS, S3, and Secrets Manager.
-- Ensure mysqldump is installed (mariadb105-client package).
-- The backup file is first saved to /tmp/ then uploaded to your S3 bucket.
-- Temporary RDS resources are cleaned up automatically in the teardown step.
-- Use tags to rerun specific stages (useful for debugging).
-## License
-MIT License © 2025 Tony Tong
-
-## Credits
-Developed by **Tony Tong**
-Designed for **Cloud Operations / Site Reliability Engineering** teams automating AWS RDS snapshot exports with Ansible.
+## 👨‍💻 Author
+Tony Tong 
+CloudOps Engineer | AWS & DevOps Automation
